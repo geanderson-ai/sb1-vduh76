@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC Audio Stream</title>
+</head>
+<body>
+    <button id="startButton">Start Streaming</button>
+    <button id="stopButton" disabled>Stop Streaming</button>
+
+    <script>
+        let pc = null;
+        let ws = null;
+
+        async function start() {
+            const startButton = document.getElementById('startButton');
+            const stopButton = document.getElementById('stopButton');
+
+            try {
+                // Get audio stream
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                // Create WebSocket connection
+                ws = new WebSocket('ws://localhost:3000');
+                
+                // Create RTCPeerConnection
+                pc = new RTCPeerConnection();
+
+                // Add audio track
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                // Create and set local description
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Send offer to server
+                const response = await fetch('/offer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sdp: pc.localDescription.sdp,
+                        type: pc.localDescription.type
+                    })
+                });
+
+                // Get answer from server
+                const answer = await response.json();
+                await pc.setRemoteDescription(answer);
+
+                startButton.disabled = true;
+                stopButton.disabled = false;
+            } catch (e) {
+                console.error('Error starting stream:', e);
+            }
+        }
+
+        async function stop() {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
+            document.getElementById('startButton').disabled = false;
+            document.getElementById('stopButton').disabled = true;
+        }
+
+        document.getElementById('startButton').addEventListener('click', start);
+        document.getElementById('stopButton').addEventListener('click', stop);
+    </script>
+</body>
+</html>
